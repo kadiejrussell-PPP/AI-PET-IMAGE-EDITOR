@@ -1,0 +1,1 @@
+Added Netlify function structure

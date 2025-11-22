@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>AI Pet Image Editor</title>
+  <style>
+    body{font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, Arial; background:#f3f4f6; color:#111; margin:0; padding:20px;}
+    .container{max-width:980px;margin:18px auto;background:white;padding:20px;border-radius:12px;box-shadow:0 6px 18px rgba(0,0,0,0.08);}
+    .logo{display:block;margin:12px auto 6px auto;max-width:220px;}
+    h1{text-align:center;margin:6px 0 18px 0;}
+    .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;}
+    .col{flex:1;min-width:240px;}
+    input[type=file]{padding:6px;}
+    select, textarea, button, input[type=text]{width:100%;padding:10px;border-radius:8px;border:1px solid #ddd;}
+    textarea{min-height:80px; resize:vertical;}
+    #backgrounds{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;}
+    .bg-btn{padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:#fff;cursor:pointer;}
+    #preview, #resultImg{max-width:100%;display:block;margin:12px auto;border-radius:8px;border:1px solid #eee;}
+    .controls{margin-top:12px;}
+    .small{font-size:13px;color:#555;}
+    #status{margin-top:8px;font-size:14px;color:#444;}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <img src="logo.png" alt="AI Pet Image Editor Logo" class="logo" id="logoImg">
+    <h1>AI PET IMAGE EDITOR</h1>
+
+    <div class="row">
+      <div class="col">
+        <label class="small">1) Upload your pet photo</label>
+        <input type="file" id="petFile" accept="image/*">
+        <img id="preview" style="display:none;">
+      </div>
+
+      <div class="col">
+        <label class="small">2) Choose a preset background (or use Custom)</label>
+        <div id="backgrounds" class="small">
+          <button class="bg-btn" data-bg="A cozy Christmas living room with lights and a tree">Christmas</button>
+          <button class="bg-btn" data-bg="Sunny tropical beach with palm trees">Beach</button>
+          <button class="bg-btn" data-bg="Warm Thanksgiving table and decor">Thanksgiving</button>
+          <button class="bg-btn" data-bg="Snowy winter park with gentle snowfall">Winter</button>
+          <button class="bg-btn" data-bg="Colorful birthday party with balloons">Birthday</button>
+          <button class="bg-btn" data-bg="Spooky Halloween night with pumpkins">Halloween</button>
+          <button class="bg-btn" data-bg="Starry outer space with planets">Space</button>
+          <button class="bg-btn" data-bg="Elegant studio portrait backdrop">Studio</button>
+          <button class="bg-btn" data-bg="Autumn forest with falling leaves">Autumn</button>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:14px;">
+      <label class="small">3) Describe extras (hat, outfit, pose, colors...). Use the microphone to speak.</label>
+      <textarea id="prompt" placeholder="Example: Put a red knit hat, a blue scarf, and falling snowflakes."></textarea>
+      <div class="row" style="margin-top:8px;">
+        <button id="voiceBtn">🎤 Speak</button>
+        <button id="generateBtn" disabled>Generate Image</button>
+        <button id="resetBtn">Reset</button>
+      </div>
+      <div id="status" aria-live="polite"></div>
+    </div>
+
+    <div id="result" style="margin-top:18px;">
+      <h3 style="text-align:center;">Generated Result</h3>
+      <img id="resultImg" style="display:none;">
+      <div style="text-align:center;margin-top:8px;">
+        <a id="downloadBtn" style="display:none;" download="ai-pet.png">Download Image</a>
+      </div>
+    </div>
+
+    <p class="small" style="margin-top:16px;">Notes: Your Gemini API key is stored securely on Netlify (server). Do not hardcode it into files. Replace <code>logo.png</code> with your real logo image file before deploying.</p>
+  </div>
+
+<script>
+let selectedBg = "";
+let uploadedDataUrl = "";
+const petFile = document.getElementById('petFile');
+const preview = document.getElementById('preview');
+const bgButtons = document.querySelectorAll('.bg-btn');
+const promptEl = document.getElementById('prompt');
+const generateBtn = document.getElementById('generateBtn');
+const status = document.getElementById('status');
+const resultImg = document.getElementById('resultImg');
+const downloadBtn = document.getElementById('downloadBtn');
+const resetBtn = document.getElementById('resetBtn');
+const voiceBtn = document.getElementById('voiceBtn');
+
+petFile.addEventListener('change', (e)=>{
+  const f = e.target.files && e.target.files[0];
+  if (!f) return;
+  const url = URL.createObjectURL(f);
+  preview.src = url;
+  preview.style.display = 'block';
+  uploadedDataUrl = null;
+  // convert to base64 for upload
+  const reader = new FileReader();
+  reader.onloadend = () => {
+    uploadedDataUrl = reader.result;
+    maybeEnableGenerate();
+  };
+  reader.readAsDataURL(f);
+});
+
+bgButtons.forEach(b=>b.addEventListener('click', ()=>{
+  selectedBg = b.getAttribute('data-bg');
+  // highlight
+  bgButtons.forEach(bb=>bb.style.borderColor='#ddd');
+  b.style.borderColor = '#007bff';
+  maybeEnableGenerate();
+}));
+
+function maybeEnableGenerate(){
+  generateBtn.disabled = !(uploadedDataUrl && selectedBg);
+}
+
+resetBtn.addEventListener('click', ()=>{
+  petFile.value = "";
+  preview.style.display = 'none';
+  uploadedDataUrl = "";
+  promptEl.value = "";
+  selectedBg = "";
+  bgButtons.forEach(bb=>bb.style.borderColor='#ddd');
+  resultImg.style.display = 'none';
+  downloadBtn.style.display = 'none';
+  generateBtn.disabled = true;
+  status.textContent = "";
+});
+
+// Voice recognition
+voiceBtn.addEventListener('click', ()=>{
+  if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+    alert('Voice recognition not supported in this browser.');
+    return;
+  }
+  const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const rec = new Rec();
+  rec.lang = 'en-US';
+  rec.interimResults = false;
+  rec.start();
+  status.textContent = 'Listening...';
+  rec.onresult = (ev)=>{
+    const text = ev.results[0][0].transcript;
+    promptEl.value = (promptEl.value ? promptEl.value + ' ' : '') + text;
+  };
+  rec.onend = ()=>{ status.textContent = ''; };
+  rec.onerror = (e)=>{ status.textContent = 'Voice error: ' + e.error; };
+});
+
+// Generate - call Netlify function
+generateBtn.addEventListener('click', async ()=>{
+  if (!uploadedDataUrl || !selectedBg) return alert('Upload an image and pick a background.');
+  const userText = promptEl.value || '';
+  const combinedPrompt = `${userText} ${selectedBg}`.trim();
+  status.textContent = 'Generating... This may take a few seconds.';
+  generateBtn.disabled = true;
+  try {
+    const res = await fetch('/.netlify/functions/generate', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ image: uploadedDataUrl, prompt: combinedPrompt })
+    });
+    const data = await res.json();
+    if (data.error) {
+      status.textContent = 'Error: ' + data.error;
+      generateBtn.disabled = false;
+      return;
+    }
+    // data.image_b64 is expected to be a base64 image (data URL without prefix)
+    let imgSrc = data.image_b64 ? 'data:image/png;base64,' + data.image_b64 : data.imageUrl || null;
+    if (!imgSrc) {
+      status.textContent = 'No image returned from server.';
+      generateBtn.disabled = false;
+      return;
+    }
+    resultImg.src = imgSrc;
+    resultImg.style.display = 'block';
+    downloadBtn.href = imgSrc;
+    downloadBtn.style.display = 'inline-block';
+    downloadBtn.textContent = 'Download Image';
+    status.textContent = 'Done.';
+  } catch (err) {
+    console.error(err);
+    status.textContent = 'Generation failed.';
+  } finally {
+    generateBtn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>
